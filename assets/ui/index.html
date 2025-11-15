@@ -300,11 +300,37 @@
             orderProgress = 0;
             updateUI();
             
-            // Send restart command to server
-            if (typeof hytopia !== 'undefined' && hytopia.sendChatMessage) {
-                hytopia.sendChatMessage('/restart');
-            } else {
-                console.error('hytopia.sendChatMessage not available');
+            // Send restart command to server via chat
+            // The server listens for /restart command
+            // We'll use the chat input method
+            try {
+                // Try to access chat input and send message
+                if (typeof hytopia !== 'undefined') {
+                    // Method 1: Direct chat message
+                    if (hytopia.sendChatMessage) {
+                        hytopia.sendChatMessage('/restart');
+                        return;
+                    }
+                    // Method 2: Chat object
+                    if (hytopia.chat && typeof hytopia.chat.send === 'function') {
+                        hytopia.chat.send('/restart');
+                        return;
+                    }
+                    // Method 3: Input simulation
+                    if (hytopia.pressInput) {
+                        // Simulate typing /restart and Enter
+                        // This is a workaround - player can also type /restart manually
+                        console.log('Please type /restart in chat to start the game');
+                        showStatusMessage('Type /restart in chat to start!', 3000);
+                        return;
+                    }
+                }
+                // Fallback: Show message to user
+                console.log('Please type /restart in the chat to start the game');
+                showStatusMessage('Type /restart in chat to start!', 3000);
+            } catch (error) {
+                console.error('Error sending restart command:', error);
+                showStatusMessage('Type /restart in chat to start!', 3000);
             }
         }
         

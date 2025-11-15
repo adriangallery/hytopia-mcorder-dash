@@ -380,9 +380,9 @@ startServer(world => {
     // Load UI
     player.ui.load('ui/index.html');
 
-    // Welcome message - game starts when player clicks button
+    // Welcome message - game starts when player clicks button or types /restart
     world.chatManager.sendPlayerMessage(player, 'Welcome to McOrder Dash!', '00FF00');
-    world.chatManager.sendPlayerMessage(player, 'Click "START GAME" button to begin!', '00FF00');
+    world.chatManager.sendPlayerMessage(player, 'Click "START GAME" button or type /restart in chat to begin!', '00FF00');
     world.chatManager.sendPlayerMessage(player, 'Move around to catch falling food items in the correct order!', '00FF00');
     
     // Don't start game automatically - wait for button click
