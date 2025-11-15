@@ -124,20 +124,23 @@ startServer(world => {
     const position = getRandomPositionNearPlayer(playerPos);
     
     // Create entity with real food texture - make it small and functional
-    // Use billboard style (thin in Z) so it's visible from all angles and can't be pushed
+    // Use billboard style (thin in Z) so it's visible from all angles
     const item = new Entity({
       name: `item-${itemCode}-${Date.now()}-${Math.random()}`,
       blockTextureUri: itemType.textureUri,
       blockHalfExtents: { x: 0.3, y: 0.3, z: 0.05 }, // Small size, thin in Z for billboard effect
+      rigidBodyOptions: {
+        type: 'fixed', // Fixed so it can't be pushed or moved - set in constructor
+      },
     });
-
-    // Set rigid body to fixed BEFORE spawning so it can't be pushed
-    item.rigidBodyOptions = {
-      type: 'fixed', // Fixed so it can't be pushed or moved
-    };
 
     // Spawn the entity
     item.spawn(world, position);
+    
+    // Ensure it stays fixed after spawning
+    if (item.rigidBodyOptions) {
+      item.rigidBodyOptions.type = 'fixed';
+    }
 
     console.log(`✅ Spawned item ${itemCode} (${itemType.name}) at position:`, position, 'using texture:', itemType.textureUri);
     console.log(`   Distance from player: ${Math.sqrt(Math.pow(position.x - playerPos.x, 2) + Math.pow(position.z - playerPos.z, 2)).toFixed(2)} blocks`);
@@ -435,14 +438,17 @@ startServer(world => {
         }
 
         // Collect if player is close horizontally and not too far vertically
-        // Increased vertical tolerance to 5.0 for easier collection
+        // Use larger distance for easier collection - player just needs to be near
         if (horizontalDistance < GAME_CONFIG.ITEM_COLLECTION_DISTANCE && verticalDistance < 5.0) {
           // Debug logging
-          console.log(`[COLLECTION] Collecting item ${itemCode}: horizontal=${horizontalDistance.toFixed(2)}, vertical=${verticalDistance.toFixed(2)}`);
+          console.log(`[COLLECTION] Attempting to collect item ${itemCode}: horizontal=${horizontalDistance.toFixed(2)}, vertical=${verticalDistance.toFixed(2)}`);
           
-          // Reset notification for this item if collected
-          state.nearbyItemsNotified.delete(item.id);
-          processItemCollection(world, playerId, state, item, itemCode);
+          // Only process if item is still spawned and valid
+          if (item.isSpawned) {
+            // Reset notification for this item if collected
+            state.nearbyItemsNotified.delete(item.id);
+            processItemCollection(world, playerId, state, item, itemCode);
+          }
         }
       });
     });
