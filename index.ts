@@ -55,6 +55,7 @@ interface PlayerGameState {
   worldItems: Entity[]; // Items placed in the world
   orderTimer?: NodeJS.Timeout;
   managerEntity?: Entity;
+  nearbyItemsNotified: Set<string>; // Track which items we've notified about
   player: any;
 }
 
@@ -107,6 +108,7 @@ startServer(world => {
       orderCount: 0,
       isGameOver: false,
       worldItems: [],
+      nearbyItemsNotified: new Set(),
       player: player,
     };
   }
@@ -157,6 +159,9 @@ startServer(world => {
 
     // Clear previous items
     clearWorldItems(state);
+    
+    // Reset notifications
+    state.nearbyItemsNotified.clear();
 
     if (state.orderTimer) {
       clearTimeout(state.orderTimer);
@@ -214,17 +219,22 @@ startServer(world => {
     // Send message to player
     world.chatManager.sendPlayerMessage(
       state.player,
-      `New Order: Find ${state.currentOrder.map(c => GAME_CONFIG.ITEM_TYPES[c as keyof typeof GAME_CONFIG.ITEM_TYPES].name).join(', ')}`,
+      `📋 New Order: Find ${state.currentOrder.map(c => GAME_CONFIG.ITEM_TYPES[c as keyof typeof GAME_CONFIG.ITEM_TYPES].name).join(' → ')}`,
       'FFFF00'
     );
     world.chatManager.sendPlayerMessage(
       state.player,
-      `✅ Spawned ${spawnedCount} items very close to you (1-5 blocks away)! Walk over them to collect!`,
+      `✅ Spawned ${spawnedCount} items very close to you (1-5 blocks away)!`,
       '00FF00'
     );
     world.chatManager.sendPlayerMessage(
       state.player,
-      `Look for colored blocks: Red=Burger, Green=Fries, Gray=Nuggets, Yellow=Drink, Dark Green=Icecream`,
+      `🎯 HOW TO COLLECT: Walk over the colored blocks! You'll see a message when you're near one.`,
+      '00FFFF'
+    );
+    world.chatManager.sendPlayerMessage(
+      state.player,
+      `🔍 Item Colors: 🔴 Red=BURGER | 🟢 Light Green=FRIES | ⚪ Gray=NUGGETS | 🟡 Yellow=DRINK | 🟢 Dark Green=ICECREAM`,
       'FFFF00'
     );
 
@@ -261,9 +271,19 @@ startServer(world => {
 
       world.chatManager.sendPlayerMessage(
         state.player,
-        `✅ Collected ${GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES].name}! +${GAME_CONFIG.SCORE_PER_ITEM} points`,
+        `🎉 Collected ${GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES].name}! +${GAME_CONFIG.SCORE_PER_ITEM} points`,
         '00FF00'
       );
+      
+      // Show what's next
+      if (state.orderProgress < state.currentOrder.length) {
+        const nextItem = GAME_CONFIG.ITEM_TYPES[state.currentOrder[state.orderProgress] as keyof typeof GAME_CONFIG.ITEM_TYPES];
+        world.chatManager.sendPlayerMessage(
+          state.player,
+          `➡️ Next: Find ${nextItem.name}`,
+          'FFFF00'
+        );
+      }
 
       // Remove item from world
       if (item.isSpawned) {
@@ -372,7 +392,7 @@ startServer(world => {
         );
       }
 
-      // Check distance to each item - collect when player walks over them
+      // Check distance to each item - show info when nearby and collect when walking over
       state.worldItems.forEach(item => {
         if (!item.isSpawned) return;
 
@@ -392,14 +412,32 @@ startServer(world => {
         
         const verticalDistance = Math.abs(itemPos.y - playerPos.y);
 
+        // Extract item code from entity name
+        const nameParts = item.name.split('-');
+        if (nameParts.length < 2) return;
+        const itemCode = nameParts[1];
+        const itemType = GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES];
+        if (!itemType) return;
+
+        // Show item info when player is nearby (5-8 blocks away)
+        if (horizontalDistance < 8 && horizontalDistance > 3 && !state.nearbyItemsNotified.has(item.id)) {
+          const isRequired = state.currentOrder[state.orderProgress] === itemCode;
+          const status = isRequired ? '✅ REQUIRED NEXT!' : '❌ Wrong item';
+          const color = isRequired ? '00FF00' : 'FF0000';
+          
+          world.chatManager.sendPlayerMessage(
+            state.player,
+            `${status} Nearby: ${itemType.name} (${itemCode}) - ${horizontalDistance.toFixed(1)} blocks away`,
+            color
+          );
+          state.nearbyItemsNotified.add(item.id);
+        }
+
         // Collect if player is close horizontally and not too far vertically
         if (horizontalDistance < GAME_CONFIG.ITEM_COLLECTION_DISTANCE && verticalDistance < 3.0) {
-          // Extract item code from entity name
-          const nameParts = item.name.split('-');
-          if (nameParts.length >= 2) {
-            const itemCode = nameParts[1];
-            processItemCollection(world, playerId, state, item, itemCode);
-          }
+          // Reset notification for this item if collected
+          state.nearbyItemsNotified.delete(item.id);
+          processItemCollection(world, playerId, state, item, itemCode);
         }
       });
     });
