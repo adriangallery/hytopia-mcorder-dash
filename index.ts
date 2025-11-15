@@ -18,9 +18,9 @@ import worldMap from './assets/map.json';
 
 // Game Configuration
 const GAME_CONFIG = {
-  SPAWN_RADIUS: 12, // Radius around player to spawn items (controlled testing area)
-  ITEM_SPAWN_HEIGHT: 2.5, // Height above ground for items
-  ITEM_COLLECTION_DISTANCE: 2.5, // Distance to collect item
+  SPAWN_RADIUS: 8, // Radius around player to spawn items (close for testing)
+  ITEM_SPAWN_HEIGHT: 1.5, // Height above ground for items
+  ITEM_COLLECTION_DISTANCE: 3.0, // Distance to collect item (larger for easier collection)
   ITEMS_PER_ORDER: 5, // Number of items to spawn for each order
   SCORE_PER_ITEM: 10,
   SCORE_PER_ORDER: 100,
@@ -28,12 +28,12 @@ const GAME_CONFIG = {
   MIN_SAFE_Y: -5, // Minimum Y position before teleporting player back
   SAFE_SPAWN_Y: 10, // Safe Y position to teleport player to
   ITEM_TYPES: {
-    // Using standard HYTOPIA blocks for testing - these are guaranteed to be visible
-    'B': { blockId: 4, name: 'Burger', textureUri: 'blocks/coal-ore.png' }, // Coal ore (black/dark)
-    'F': { blockId: 3, name: 'Fries', textureUri: 'blocks/bricks.png' }, // Bricks (red/orange)
-    'N': { blockId: 15, name: 'Nuggets', textureUri: 'blocks/stone.png' }, // Stone (gray)
-    'D': { blockId: 12, name: 'Drink', textureUri: 'blocks/sand.png' }, // Sand (yellow/beige)
-    'I': { blockId: 10, name: 'Icecream', textureUri: 'blocks/oak-leaves.png' }, // Oak leaves (green)
+    // Using highly visible standard HYTOPIA blocks - bright and colorful
+    'B': { blockId: 3, name: 'Burger', textureUri: 'blocks/bricks.png' }, // Bricks (red/orange - very visible)
+    'F': { blockId: 2, name: 'Fries', textureUri: 'blocks/birch-leaves.png' }, // Birch leaves (light green - very visible)
+    'N': { blockId: 1, name: 'Nuggets', textureUri: 'blocks/andesite.png' }, // Andesite (light gray - visible)
+    'D': { blockId: 12, name: 'Drink', textureUri: 'blocks/sand.png' }, // Sand (yellow - very visible)
+    'I': { blockId: 10, name: 'Icecream', textureUri: 'blocks/oak-leaves.png' }, // Oak leaves (green - very visible)
   },
   ORDERS: [
     ['B', 'F'], // Tutorial Order
@@ -60,16 +60,16 @@ interface PlayerGameState {
 
 const playerGameStates = new Map<string, PlayerGameState>();
 
-// Generate random position near player (controlled testing area)
+// Generate random position near player (close for testing)
 function getRandomPositionNearPlayer(playerPos: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
-  // Generate position within radius around player
+  // Generate position very close to player for testing (1-5 blocks away)
   const angle = Math.random() * Math.PI * 2;
-  const distance = 3 + Math.random() * (GAME_CONFIG.SPAWN_RADIUS - 3); // Min 3 blocks away, max SPAWN_RADIUS
+  const distance = 1 + Math.random() * 4; // Min 1 block, max 5 blocks - very close!
   
   const x = playerPos.x + Math.cos(angle) * distance;
   const z = playerPos.z + Math.sin(angle) * distance;
-  // Use a fixed height above typical ground level (Y=2) instead of relative to player
-  const y = 2 + GAME_CONFIG.ITEM_SPAWN_HEIGHT;
+  // Use player's Y position + spawn height so items are at ground level
+  const y = playerPos.y + GAME_CONFIG.ITEM_SPAWN_HEIGHT;
   
   return { x, y, z };
 }
@@ -121,12 +121,11 @@ startServer(world => {
 
     const position = getRandomPositionNearPlayer(playerPos);
     
-    // Create entity using standard HYTOPIA block texture - these are guaranteed to work
-    // Make it larger and more visible for testing
+    // Create entity using standard HYTOPIA block texture - make it VERY large and visible
     const item = new Entity({
       name: `item-${itemCode}-${Date.now()}-${Math.random()}`,
       blockTextureUri: itemType.textureUri,
-      blockHalfExtents: { x: 0.6, y: 0.6, z: 0.6 }, // Larger size for better visibility
+      blockHalfExtents: { x: 1.0, y: 1.0, z: 1.0 }, // Very large size (2x2x2 blocks) for maximum visibility
     });
 
     // Spawn the entity
@@ -137,7 +136,8 @@ startServer(world => {
       item.rigidBodyOptions.type = 'fixed';
     }
 
-    console.log(`Spawned item ${itemCode} (${itemType.name}) at position:`, position, 'using block:', itemType.textureUri);
+    console.log(`✅ Spawned item ${itemCode} (${itemType.name}) at position:`, position, 'using block:', itemType.textureUri);
+    console.log(`   Distance from player: ${Math.sqrt(Math.pow(position.x - playerPos.x, 2) + Math.pow(position.z - playerPos.z, 2)).toFixed(2)} blocks`);
     return item;
   }
 
@@ -219,7 +219,12 @@ startServer(world => {
     );
     world.chatManager.sendPlayerMessage(
       state.player,
-      `Spawned ${spawnedCount} items around you! Walk close to collect them in order!`,
+      `✅ Spawned ${spawnedCount} items very close to you (1-5 blocks away)! Walk over them to collect!`,
+      '00FF00'
+    );
+    world.chatManager.sendPlayerMessage(
+      state.player,
+      `Look for colored blocks: Red=Burger, Green=Fries, Gray=Nuggets, Yellow=Drink, Dark Green=Icecream`,
       'FFFF00'
     );
 
@@ -245,14 +250,18 @@ startServer(world => {
       state.score += GAME_CONFIG.SCORE_PER_ITEM;
 
       // Play catch sound
-      new Audio({
-        uri: 'audio/mcorder/Triple Bleep.mp3',
-        volume: 0.55,
-      }).play(world);
+      try {
+        new Audio({
+          uri: 'audio/mcorder/Triple Bleep.mp3',
+          volume: 0.55,
+        }).play(world);
+      } catch (e) {
+        console.log('Audio play error:', e);
+      }
 
       world.chatManager.sendPlayerMessage(
         state.player,
-        `Correct! Found ${GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES].name}! +${GAME_CONFIG.SCORE_PER_ITEM} points`,
+        `✅ Collected ${GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES].name}! +${GAME_CONFIG.SCORE_PER_ITEM} points`,
         '00FF00'
       );
 
@@ -363,7 +372,7 @@ startServer(world => {
         );
       }
 
-      // Check distance to each item
+      // Check distance to each item - collect when player walks over them
       state.worldItems.forEach(item => {
         if (!item.isSpawned) return;
 
@@ -374,8 +383,17 @@ startServer(world => {
           Math.pow(itemPos.z - playerPos.z, 2)
         );
 
-        // Check if player is close enough to collect
-        if (distance < GAME_CONFIG.ITEM_COLLECTION_DISTANCE) {
+        // Check if player is close enough to collect (walking over the item)
+        // Use horizontal distance mainly (ignore Y difference for easier collection)
+        const horizontalDistance = Math.sqrt(
+          Math.pow(itemPos.x - playerPos.x, 2) +
+          Math.pow(itemPos.z - playerPos.z, 2)
+        );
+        
+        const verticalDistance = Math.abs(itemPos.y - playerPos.y);
+
+        // Collect if player is close horizontally and not too far vertically
+        if (horizontalDistance < GAME_CONFIG.ITEM_COLLECTION_DISTANCE && verticalDistance < 3.0) {
           // Extract item code from entity name
           const nameParts = item.name.split('-');
           if (nameParts.length >= 2) {
