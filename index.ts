@@ -200,10 +200,12 @@ startServer(world => {
     }
 
     // Spawn all items near player
+    let spawnedCount = 0;
     itemsToSpawn.forEach(itemCode => {
       const item = spawnWorldItem(world, itemCode, playerId, playerPos);
       if (item) {
         state.worldItems.push(item);
+        spawnedCount++;
       }
     });
 
@@ -215,7 +217,7 @@ startServer(world => {
     );
     world.chatManager.sendPlayerMessage(
       state.player,
-      `Items are scattered around you! Walk close to collect them in order!`,
+      `Spawned ${spawnedCount} items around you! Walk close to collect them in order!`,
       'FFFF00'
     );
 
