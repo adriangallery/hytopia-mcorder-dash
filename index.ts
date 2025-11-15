@@ -67,13 +67,20 @@ function getRandomPositionNearPlayer(playerPos: { x: number; y: number; z: numbe
   
   const x = playerPos.x + Math.cos(angle) * distance;
   const z = playerPos.z + Math.sin(angle) * distance;
-  const y = playerPos.y + GAME_CONFIG.ITEM_SPAWN_HEIGHT;
+  // Use a fixed height above typical ground level (Y=2) instead of relative to player
+  const y = 2 + GAME_CONFIG.ITEM_SPAWN_HEIGHT;
   
   return { x, y, z };
 }
 
 startServer(world => {
-  world.loadMap(worldMap);
+  // Load the standard HYTOPIA test map
+  try {
+    world.loadMap(worldMap);
+    console.log('Map loaded successfully');
+  } catch (error) {
+    console.error('Error loading map:', error);
+  }
 
   // Background music
   const backgroundMusic = new Audio({
@@ -103,41 +110,32 @@ startServer(world => {
     };
   }
 
-  // Create manager entity
-  function createManagerEntity(world: any, playerId: string, direction: 'left' | 'right'): Entity {
-    const textureUri = direction === 'left' 
-      ? 'mcorder/Manager_L.png' 
-      : 'mcorder/Manager_R.png';
-    
-    const manager = new Entity({
-      name: `manager-${playerId}`,
-      blockTextureUri: textureUri,
-      blockHalfExtents: { x: 0.5, y: 1, z: 0.1 },
-    });
-    
-    return manager;
-  }
-
   // Spawn an item in the world near the player
   function spawnWorldItem(world: any, itemCode: string, playerId: string, playerPos: { x: number; y: number; z: number }): Entity | null {
     const itemType = GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES];
-    if (!itemType) return null;
+    if (!itemType) {
+      console.error(`Invalid item code: ${itemCode}`);
+      return null;
+    }
 
     const position = getRandomPositionNearPlayer(playerPos);
     
+    // Create entity with block texture - ensure texture path is correct
     const item = new Entity({
       name: `item-${itemCode}-${Date.now()}-${Math.random()}`,
       blockTextureUri: itemType.textureUri,
-      blockHalfExtents: { x: 0.4, y: 0.4, z: 0.4 },
+      blockHalfExtents: { x: 0.5, y: 0.5, z: 0.5 },
     });
 
+    // Spawn the entity first
     item.spawn(world, position);
 
-    // Make it float slightly and rotate
-    item.rigidBodyOptions = {
-      type: 'fixed', // Fixed so it doesn't fall
-    };
+    // Set rigid body to fixed after spawning
+    if (item.rigidBodyOptions) {
+      item.rigidBodyOptions.type = 'fixed';
+    }
 
+    console.log(`Spawned item ${itemCode} at position:`, position, 'with texture:', itemType.textureUri);
     return item;
   }
 
@@ -217,7 +215,7 @@ startServer(world => {
     );
     world.chatManager.sendPlayerMessage(
       state.player,
-      `Items are scattered around the world! Explore and find them in order!`,
+      `Items are scattered around you! Walk close to collect them in order!`,
       'FFFF00'
     );
 
@@ -397,16 +395,14 @@ startServer(world => {
     });
 
     playerEntity.spawn(world, { x: 0, y: 10, z: 0 });
-
-    // Create manager entity
-    const managerEntity = createManagerEntity(world, playerId, 'right');
-    managerEntity.spawn(world, { x: 0, y: 10, z: 0 });
-    state.managerEntity = managerEntity;
+    
+    // Verify map loaded - send confirmation message
+    world.chatManager.sendPlayerMessage(player, 'Map loaded successfully!', '00FF00');
 
     // Load UI
     player.ui.load('ui/index.html');
 
-    // Welcome message
+    // Welcome messages in English
     world.chatManager.sendPlayerMessage(player, 'Welcome to McOrder Dash!', '00FF00');
     world.chatManager.sendPlayerMessage(player, 'Click "START GAME" button or type /restart in chat to begin!', '00FF00');
     world.chatManager.sendPlayerMessage(player, 'Items will spawn near you in a controlled testing area!', '00FF00');
@@ -428,10 +424,6 @@ startServer(world => {
       }
       
       clearWorldItems(state);
-      
-      if (state.managerEntity && state.managerEntity.isSpawned) {
-        state.managerEntity.despawn();
-      }
     }
     
     playerGameStates.delete(playerId);
