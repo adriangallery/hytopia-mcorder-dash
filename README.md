@@ -1,14 +1,15 @@
 # McOrder Dash - HYTOPIA Game
 
-A 3D adaptation of "Adrian's McOrder Dash" game for HYTOPIA platform.
+A 3D exploration-based order fulfillment game for HYTOPIA platform.
 
 ## Description
 
-McOrder Dash is a fast-paced order fulfillment game where players must catch falling food items in the correct order to complete customer orders. The game features:
+McOrder Dash is an exploration game where players must find food items scattered around a small world in the correct order to complete customer orders. The game features:
 
 - 3D Minecraft-style environment
+- Exploration-based gameplay
 - Multiple food items (Burger, Fries, Nuggets, Drink, Ice Cream)
-- Progressive difficulty system
+- Time-limited orders
 - Score and lives system
 - Custom UI with order display
 
@@ -46,11 +47,14 @@ To play, go to https://hytopia.com/play and connect to your local server.
 ## Gameplay
 
 1. Click "START GAME" button when you join
-2. Food items will fall from above in 3 lanes
-3. Move to catch items in the order shown at the top
-4. Complete orders to earn points
-5. Avoid mistakes or you'll lose lives
-6. Game gets faster as you complete more orders
+2. A new order will appear showing which items you need to find
+3. Food items will be scattered randomly around the world
+4. Explore the world and walk close to items to collect them
+5. Collect items in the correct order shown at the top
+6. Complete orders to earn points
+7. You have 60 seconds per order
+8. Avoid mistakes or you'll lose lives
+9. Game gets more challenging as you complete more orders
 
 ## Project Structure
 
@@ -68,7 +72,10 @@ hytopia/
 
 ## Version Control
 
-This project uses Git for version control. To revert changes:
+This project uses Git for version control and is hosted on GitHub:
+**https://github.com/adriangallery/hytopia-mcorder-dash**
+
+To revert changes:
 
 ```bash
 # View commit history
@@ -80,9 +87,8 @@ git checkout <commit-hash>
 # Create a new branch
 git checkout -b feature/new-feature
 
-# Push to GitHub (after setting up remote)
-git remote add origin <your-repo-url>
-git push -u origin main
+# Push changes to GitHub
+git push origin main
 ```
 
 ## Development
@@ -92,7 +98,15 @@ git push -u origin main
 - Map configuration: `assets/map.json`
 - Custom blocks: Defined in `map.json` (IDs 17-21)
 
+## Game Mechanics
+
+- Items spawn randomly within world bounds (-20 to 20 on X and Z axes)
+- Items are placed at height 3 above ground level
+- Players must walk within 2.5 blocks of an item to collect it
+- Each order has a 60-second time limit
+- Wrong items or timeouts result in losing a life
+- 3 lives total, game over when all lives are lost
+
 ## License
 
 This is a personal project adaptation.
-
