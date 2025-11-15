@@ -20,7 +20,7 @@ import worldMap from './assets/map.json';
 const GAME_CONFIG = {
   SPAWN_RADIUS: 8, // Radius around player to spawn items (close for testing)
   ITEM_SPAWN_HEIGHT: 1.5, // Height above ground for items
-  ITEM_COLLECTION_DISTANCE: 3.0, // Distance to collect item (larger for easier collection)
+  ITEM_COLLECTION_DISTANCE: 5.0, // Distance to collect item (increased for easier collection)
   ITEMS_PER_ORDER: 5, // Number of items to spawn for each order
   SCORE_PER_ITEM: 10,
   SCORE_PER_ORDER: 100,
@@ -434,10 +434,17 @@ startServer(world => {
         }
 
         // Collect if player is close horizontally and not too far vertically
-        if (horizontalDistance < GAME_CONFIG.ITEM_COLLECTION_DISTANCE && verticalDistance < 3.0) {
+        // Increased vertical tolerance to 5.0 for easier collection
+        if (horizontalDistance < GAME_CONFIG.ITEM_COLLECTION_DISTANCE && verticalDistance < 5.0) {
+          // Debug logging
+          console.log(`[COLLECTION] Player near item ${itemCode}: horizontal=${horizontalDistance.toFixed(2)}, vertical=${verticalDistance.toFixed(2)}`);
+          
           // Reset notification for this item if collected
           state.nearbyItemsNotified.delete(item.id);
           processItemCollection(world, playerId, state, item, itemCode);
+        } else if (horizontalDistance < GAME_CONFIG.ITEM_COLLECTION_DISTANCE + 1.0) {
+          // Debug: log when close but not collecting
+          console.log(`[COLLECTION DEBUG] Close but not collecting ${itemCode}: horizontal=${horizontalDistance.toFixed(2)}, vertical=${verticalDistance.toFixed(2)}, threshold=${GAME_CONFIG.ITEM_COLLECTION_DISTANCE}`);
         }
       });
     });
@@ -464,13 +471,15 @@ startServer(world => {
 
     // Welcome messages in English
     world.chatManager.sendPlayerMessage(player, 'Welcome to McOrder Dash!', '00FF00');
-    world.chatManager.sendPlayerMessage(player, 'Click "START GAME" button or type /restart in chat to begin!', '00FF00');
-    world.chatManager.sendPlayerMessage(player, 'Items will spawn near you in a controlled testing area!', '00FF00');
-    world.chatManager.sendPlayerMessage(player, 'Walk close to items to collect them. Complete orders to earn points!', '00FF00');
+    world.chatManager.sendPlayerMessage(player, 'Game starting automatically in 2 seconds...', '00FF00');
+    world.chatManager.sendPlayerMessage(player, 'Items will spawn near you! Walk over them to collect!', '00FF00');
     world.chatManager.sendPlayerMessage(player, 'You cannot fall - you will be teleported back if you go too low!', '00FF00');
     
-    // Don't start game automatically - wait for button click
-    state.isGameOver = true;
+    // Auto-start game after a short delay
+    state.isGameOver = false;
+    setTimeout(() => {
+      startNewOrder(world, playerId, state);
+    }, 2000);
   });
 
   // Handle player leaving
