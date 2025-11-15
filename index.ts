@@ -28,12 +28,12 @@ const GAME_CONFIG = {
   MIN_SAFE_Y: -5, // Minimum Y position before teleporting player back
   SAFE_SPAWN_Y: 10, // Safe Y position to teleport player to
   ITEM_TYPES: {
-    // Using highly visible standard HYTOPIA blocks - bright and colorful
-    'B': { blockId: 3, name: 'Burger', textureUri: 'blocks/bricks.png' }, // Bricks (red/orange - very visible)
-    'F': { blockId: 2, name: 'Fries', textureUri: 'blocks/birch-leaves.png' }, // Birch leaves (light green - very visible)
-    'N': { blockId: 1, name: 'Nuggets', textureUri: 'blocks/andesite.png' }, // Andesite (light gray - visible)
-    'D': { blockId: 12, name: 'Drink', textureUri: 'blocks/sand.png' }, // Sand (yellow - very visible)
-    'I': { blockId: 10, name: 'Icecream', textureUri: 'blocks/oak-leaves.png' }, // Oak leaves (green - very visible)
+    // Using real food item textures from examples/mcorder/
+    'B': { blockId: 17, name: 'Burger', textureUri: 'blocks/mcorder/Burger.png' },
+    'F': { blockId: 18, name: 'Fries', textureUri: 'blocks/mcorder/Fries.png' },
+    'N': { blockId: 20, name: 'Nuggets', textureUri: 'blocks/mcorder/Nuggets.png' },
+    'D': { blockId: 19, name: 'Drink', textureUri: 'blocks/mcorder/Coke.png' },
+    'I': { blockId: 21, name: 'Icecream', textureUri: 'blocks/mcorder/Ice.png' },
   },
   ORDERS: [
     ['B', 'F'], // Tutorial Order
@@ -113,7 +113,7 @@ startServer(world => {
     };
   }
 
-  // Spawn an item in the world near the player using standard HYTOPIA blocks
+  // Spawn an item in the world near the player using real food item textures
   function spawnWorldItem(world: any, itemCode: string, playerId: string, playerPos: { x: number; y: number; z: number }): Entity | null {
     const itemType = GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES];
     if (!itemType) {
@@ -123,22 +123,23 @@ startServer(world => {
 
     const position = getRandomPositionNearPlayer(playerPos);
     
-    // Create entity using standard HYTOPIA block texture - make it VERY large and visible
+    // Create entity with real food texture - make it small and functional
+    // Use billboard style (thin in Z) so it's visible from all angles and can't be pushed
     const item = new Entity({
       name: `item-${itemCode}-${Date.now()}-${Math.random()}`,
       blockTextureUri: itemType.textureUri,
-      blockHalfExtents: { x: 1.0, y: 1.0, z: 1.0 }, // Very large size (2x2x2 blocks) for maximum visibility
+      blockHalfExtents: { x: 0.3, y: 0.3, z: 0.05 }, // Small size, thin in Z for billboard effect
     });
+
+    // Set rigid body to fixed BEFORE spawning so it can't be pushed
+    item.rigidBodyOptions = {
+      type: 'fixed', // Fixed so it can't be pushed or moved
+    };
 
     // Spawn the entity
     item.spawn(world, position);
 
-    // Set rigid body to fixed so it doesn't fall
-    if (item.rigidBodyOptions) {
-      item.rigidBodyOptions.type = 'fixed';
-    }
-
-    console.log(`✅ Spawned item ${itemCode} (${itemType.name}) at position:`, position, 'using block:', itemType.textureUri);
+    console.log(`✅ Spawned item ${itemCode} (${itemType.name}) at position:`, position, 'using texture:', itemType.textureUri);
     console.log(`   Distance from player: ${Math.sqrt(Math.pow(position.x - playerPos.x, 2) + Math.pow(position.z - playerPos.z, 2)).toFixed(2)} blocks`);
     return item;
   }
