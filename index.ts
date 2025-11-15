@@ -2,6 +2,7 @@
  * HYTOPIA - McOrder Dash Game
  * 
  * Adaptation of "Adrian's McOrder Dash" game to HYTOPIA 3D environment
+ * Players explore a small world to find food items in the correct order
  */
 
 import {
@@ -17,15 +18,19 @@ import worldMap from './assets/map.json';
 
 // Game Configuration
 const GAME_CONFIG = {
-  LANE_COUNT: 3,
-  LANE_POSITIONS: [-5, 0, 5], // X positions of the 3 lanes
-  SPAWN_HEIGHT: 30, // Height from where items fall
-  FALL_SPEED_INITIAL: 0.3,
-  FALL_SPEED_INCREMENT_PER_TIER: 0.1,
-  DROP_INTERVAL_INITIAL: 2000, // ms
-  DROP_INTERVAL_DECREMENT_PER_TIER: 200,
+  WORLD_BOUNDS: {
+    minX: -20,
+    maxX: 20,
+    minZ: -20,
+    maxZ: 20,
+    groundY: 2,
+  },
+  ITEM_SPAWN_HEIGHT: 3, // Height above ground for items
+  ITEM_COLLECTION_DISTANCE: 2.5, // Distance to collect item
+  ITEMS_PER_ORDER: 5, // Number of items to spawn for each order
   SCORE_PER_ITEM: 10,
   SCORE_PER_ORDER: 100,
+  TIME_LIMIT_PER_ORDER: 60000, // 60 seconds per order
   ITEM_TYPES: {
     'B': { blockId: 17, name: 'Burger', textureUri: 'blocks/mcorder/Burger.png' },
     'F': { blockId: 18, name: 'Fries', textureUri: 'blocks/mcorder/Fries.png' },
@@ -49,17 +54,25 @@ interface PlayerGameState {
   currentOrder: string[];
   orderProgress: number;
   orderCount: number;
-  fallSpeed: number;
-  dropInterval: number;
   isGameOver: boolean;
-  fallingItems: Entity[];
-  itemDropTimer?: NodeJS.Timeout;
+  worldItems: Entity[]; // Items placed in the world
+  orderTimer?: NodeJS.Timeout;
   managerEntity?: Entity;
-  playerDirection: 'left' | 'right';
-  player: any; // Store player reference
+  player: any;
 }
 
 const playerGameStates = new Map<string, PlayerGameState>();
+
+// Generate random position within world bounds
+function getRandomPosition(): { x: number; y: number; z: number } {
+  const x = GAME_CONFIG.WORLD_BOUNDS.minX + 
+    Math.random() * (GAME_CONFIG.WORLD_BOUNDS.maxX - GAME_CONFIG.WORLD_BOUNDS.minX);
+  const z = GAME_CONFIG.WORLD_BOUNDS.minZ + 
+    Math.random() * (GAME_CONFIG.WORLD_BOUNDS.maxZ - GAME_CONFIG.WORLD_BOUNDS.minZ);
+  const y = GAME_CONFIG.WORLD_BOUNDS.groundY + GAME_CONFIG.ITEM_SPAWN_HEIGHT;
+  
+  return { x, y, z };
+}
 
 startServer(world => {
   world.loadMap(worldMap);
@@ -86,24 +99,18 @@ startServer(world => {
       currentOrder: [],
       orderProgress: 0,
       orderCount: 0,
-      fallSpeed: GAME_CONFIG.FALL_SPEED_INITIAL,
-      dropInterval: GAME_CONFIG.DROP_INTERVAL_INITIAL,
       isGameOver: false,
-      fallingItems: [],
-      playerDirection: 'right',
+      worldItems: [],
       player: player,
     };
   }
 
-  // Create manager billboard entity
+  // Create manager entity
   function createManagerEntity(world: any, playerId: string, direction: 'left' | 'right'): Entity {
     const textureUri = direction === 'left' 
       ? 'mcorder/Manager_L.png' 
       : 'mcorder/Manager_R.png';
     
-    // Create a simple entity that will represent the manager
-    // For now, we'll use a block entity as a placeholder
-    // In a full implementation, this would be a billboard entity
     const manager = new Entity({
       name: `manager-${playerId}`,
       blockTextureUri: textureUri,
@@ -113,50 +120,51 @@ startServer(world => {
     return manager;
   }
 
-  // Spawn a falling item
-  function spawnFallingItem(world: any, itemCode: string, laneIndex: number, playerId: string): Entity | null {
+  // Spawn an item in the world at a random position
+  function spawnWorldItem(world: any, itemCode: string, playerId: string): Entity | null {
     const itemType = GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES];
     if (!itemType) return null;
 
-    const laneX = GAME_CONFIG.LANE_POSITIONS[laneIndex];
+    const position = getRandomPosition();
     
     const item = new Entity({
-      name: `item-${itemCode}-${Date.now()}`,
+      name: `item-${itemCode}-${Date.now()}-${Math.random()}`,
       blockTextureUri: itemType.textureUri,
-      blockHalfExtents: { x: 0.3, y: 0.3, z: 0.3 },
+      blockHalfExtents: { x: 0.4, y: 0.4, z: 0.4 },
     });
 
-    item.spawn(world, {
-      x: laneX,
-      y: GAME_CONFIG.SPAWN_HEIGHT,
-      z: 0,
-    });
+    item.spawn(world, position);
 
-    // Make it fall with physics
+    // Make it float slightly and rotate
     item.rigidBodyOptions = {
-      type: 'dynamic',
-      mass: 1,
+      type: 'fixed', // Fixed so it doesn't fall
     };
 
     return item;
   }
 
-  // Start new order
+  // Clear all world items for a player
+  function clearWorldItems(state: PlayerGameState) {
+    state.worldItems.forEach(item => {
+      if (item.isSpawned) {
+        item.despawn();
+      }
+    });
+    state.worldItems = [];
+  }
+
+  // Start new order and spawn items in the world
   function startNewOrder(world: any, playerId: string, state: PlayerGameState) {
     state.orderCount++;
 
-    // Increase difficulty every 3 orders
-    if (state.orderCount > 1 && (state.orderCount - 1) % 3 === 0) {
-      state.fallSpeed = Math.min(
-        state.fallSpeed + GAME_CONFIG.FALL_SPEED_INCREMENT_PER_TIER,
-        1.0
-      );
-      state.dropInterval = Math.max(
-        state.dropInterval - GAME_CONFIG.DROP_INTERVAL_DECREMENT_PER_TIER,
-        500
-      );
+    // Clear previous items
+    clearWorldItems(state);
+
+    if (state.orderTimer) {
+      clearTimeout(state.orderTimer);
     }
 
+    // Select order
     if (state.orderCount === 1) {
       state.currentOrder = GAME_CONFIG.ORDERS[0];
     } else {
@@ -166,60 +174,59 @@ startServer(world => {
 
     state.orderProgress = 0;
 
-    // Update UI
+    // Spawn items in the world
+    // Spawn all items needed for the order, plus some extra random ones
+    const itemsToSpawn: string[] = [];
+    
+    // Add required items
+    state.currentOrder.forEach(itemCode => {
+      itemsToSpawn.push(itemCode);
+    });
+    
+    // Add some random extra items to make it more challenging
+    const allItemCodes = Object.keys(GAME_CONFIG.ITEM_TYPES);
+    const extraItems = GAME_CONFIG.ITEMS_PER_ORDER - itemsToSpawn.length;
+    for (let i = 0; i < extraItems; i++) {
+      const randomItem = allItemCodes[Math.floor(Math.random() * allItemCodes.length)];
+      itemsToSpawn.push(randomItem);
+    }
+
+    // Shuffle items
+    for (let i = itemsToSpawn.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [itemsToSpawn[i], itemsToSpawn[j]] = [itemsToSpawn[j], itemsToSpawn[i]];
+    }
+
+    // Spawn all items
+    itemsToSpawn.forEach(itemCode => {
+      const item = spawnWorldItem(world, itemCode, playerId);
+      if (item) {
+        state.worldItems.push(item);
+      }
+    });
+
+    // Send message to player
     world.chatManager.sendPlayerMessage(
       state.player,
-      `New Order: ${state.currentOrder.map(c => GAME_CONFIG.ITEM_TYPES[c as keyof typeof GAME_CONFIG.ITEM_TYPES].name).join(', ')}`,
+      `New Order: Find ${state.currentOrder.map(c => GAME_CONFIG.ITEM_TYPES[c as keyof typeof GAME_CONFIG.ITEM_TYPES].name).join(', ')}`,
+      'FFFF00'
+    );
+    world.chatManager.sendPlayerMessage(
+      state.player,
+      `Items are scattered around the world! Explore and find them in order!`,
       'FFFF00'
     );
 
-    // Start item dropping
-    if (state.itemDropTimer) {
-      clearInterval(state.itemDropTimer);
-    }
-    state.itemDropTimer = setInterval(() => {
-      if (state.isGameOver) return;
-      if (state.fallingItems.length > 0) return; // Only one item at a time
-
-      const isOrderPending = state.orderProgress < state.currentOrder.length;
-      let itemCode: string;
-
-      if (isOrderPending) {
-        const requiredItemCode = state.currentOrder[state.orderProgress];
-        
-        if (state.orderCount === 1) {
-          // Tutorial: always drop required item
-          itemCode = requiredItemCode;
-        } else {
-          // Weighted: required item is more likely
-          const itemCodes = Object.keys(GAME_CONFIG.ITEM_TYPES);
-          const weightedDrops: string[] = [];
-          weightedDrops.push(requiredItemCode, requiredItemCode, requiredItemCode, requiredItemCode);
-          itemCodes.forEach(code => {
-            if (code !== requiredItemCode) {
-              weightedDrops.push(code);
-            }
-          });
-          const randomIndex = Math.floor(Math.random() * weightedDrops.length);
-          itemCode = weightedDrops[randomIndex];
-        }
-      } else {
-        // Random item when order is complete
-        const itemCodes = Object.keys(GAME_CONFIG.ITEM_TYPES);
-        itemCode = itemCodes[Math.floor(Math.random() * itemCodes.length)];
+    // Set timer for order completion
+    state.orderTimer = setTimeout(() => {
+      if (!state.isGameOver && state.orderProgress < state.currentOrder.length) {
+        loseLife(world, playerId, state, 'Time ran out!');
       }
-
-      const randomLane = Math.floor(Math.random() * GAME_CONFIG.LANE_COUNT);
-      const item = spawnFallingItem(world, itemCode, randomLane, playerId);
-      
-      if (item) {
-        state.fallingItems.push(item);
-      }
-    }, state.dropInterval);
+    }, GAME_CONFIG.TIME_LIMIT_PER_ORDER);
   }
 
-  // Process item catch
-  function processCatch(world: any, playerId: string, state: PlayerGameState, item: Entity, itemCode: string) {
+  // Process item collection
+  function processItemCollection(world: any, playerId: string, state: PlayerGameState, item: Entity, itemCode: string) {
     if (state.orderProgress === state.currentOrder.length) {
       return; // Order already fulfilled
     }
@@ -227,7 +234,7 @@ startServer(world => {
     const requiredItemCode = state.currentOrder[state.orderProgress];
 
     if (itemCode === requiredItemCode) {
-      // Correct catch!
+      // Correct item!
       state.orderProgress++;
       state.score += GAME_CONFIG.SCORE_PER_ITEM;
 
@@ -239,26 +246,39 @@ startServer(world => {
 
       world.chatManager.sendPlayerMessage(
         state.player,
-        `Correct! +${GAME_CONFIG.SCORE_PER_ITEM} points`,
+        `Correct! Found ${GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES].name}! +${GAME_CONFIG.SCORE_PER_ITEM} points`,
         '00FF00'
       );
+
+      // Remove item from world
+      if (item.isSpawned) {
+        item.despawn();
+      }
+      state.worldItems = state.worldItems.filter(i => i.id !== item.id);
 
       if (state.orderProgress === state.currentOrder.length) {
         // Order fulfilled!
         state.score += GAME_CONFIG.SCORE_PER_ORDER;
+        if (state.orderTimer) {
+          clearTimeout(state.orderTimer);
+        }
+        
         world.chatManager.sendPlayerMessage(
           state.player,
           `Order Complete! +${GAME_CONFIG.SCORE_PER_ORDER} bonus points`,
           '00FF00'
         );
 
+        // Clear remaining items
+        clearWorldItems(state);
+
         setTimeout(() => {
           startNewOrder(world, playerId, state);
-        }, 1000);
+        }, 2000);
       }
     } else {
       // Wrong item
-      loseLife(world, playerId, state, `Wrong item! Expected ${GAME_CONFIG.ITEM_TYPES[requiredItemCode as keyof typeof GAME_CONFIG.ITEM_TYPES].name}`);
+      loseLife(world, playerId, state, `Wrong item! You need ${GAME_CONFIG.ITEM_TYPES[requiredItemCode as keyof typeof GAME_CONFIG.ITEM_TYPES].name} next`);
     }
   }
 
@@ -275,12 +295,20 @@ startServer(world => {
 
     world.chatManager.sendPlayerMessage(
       state.player,
-      `Mistake! ${reason} Lives: ${state.lives}`,
+      `Mistake! ${reason} Lives remaining: ${state.lives}`,
       'FF0000'
     );
 
     if (state.lives <= 0) {
       endGame(world, playerId, state);
+    } else {
+      // Reset current order progress
+      state.orderProgress = 0;
+      world.chatManager.sendPlayerMessage(
+        state.player,
+        `Order reset. Try again!`,
+        'FFFF00'
+      );
     }
   }
 
@@ -288,17 +316,11 @@ startServer(world => {
   function endGame(world: any, playerId: string, state: PlayerGameState) {
     state.isGameOver = true;
     
-    if (state.itemDropTimer) {
-      clearInterval(state.itemDropTimer);
+    if (state.orderTimer) {
+      clearTimeout(state.orderTimer);
     }
 
-    // Despawn all falling items
-    state.fallingItems.forEach(item => {
-      if (item.isSpawned) {
-        item.despawn();
-      }
-    });
-    state.fallingItems = [];
+    clearWorldItems(state);
 
     gameOverMusic.play(world);
 
@@ -309,7 +331,7 @@ startServer(world => {
     );
   }
 
-  // Game loop - check collisions and update falling items
+  // Game loop - check for item collection
   world.on(WorldEvent.TICK, () => {
     playerGameStates.forEach((state, playerId) => {
       if (state.isGameOver) return;
@@ -321,9 +343,9 @@ startServer(world => {
       const playerEntity = playerEntities[0];
       const playerPos = playerEntity.position;
 
-      // Update falling items
-      state.fallingItems = state.fallingItems.filter(item => {
-        if (!item.isSpawned) return false;
+      // Check distance to each item
+      state.worldItems.forEach(item => {
+        if (!item.isSpawned) return;
 
         const itemPos = item.position;
         const distance = Math.sqrt(
@@ -332,29 +354,15 @@ startServer(world => {
           Math.pow(itemPos.z - playerPos.z, 2)
         );
 
-        // Check collision (player touching item)
-        if (distance < 1.5) {
-          // Determine item code from entity name
-          const itemCode = item.name.split('-')[1];
-          processCatch(world, playerId, state, item, itemCode);
-          item.despawn();
-          return false;
-        }
-
-        // Check if item fell too low
-        if (itemPos.y < -5) {
-          const requiredItemCode = state.currentOrder[state.orderProgress];
-          const itemCode = item.name.split('-')[1];
-          
-          if (itemCode === requiredItemCode && state.orderProgress < state.currentOrder.length) {
-            loseLife(world, playerId, state, `Missed ${GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES].name}!`);
+        // Check if player is close enough to collect
+        if (distance < GAME_CONFIG.ITEM_COLLECTION_DISTANCE) {
+          // Extract item code from entity name
+          const nameParts = item.name.split('-');
+          if (nameParts.length >= 2) {
+            const itemCode = nameParts[1];
+            processItemCollection(world, playerId, state, item, itemCode);
           }
-          
-          item.despawn();
-          return false;
         }
-
-        return true;
       });
     });
   });
@@ -380,10 +388,11 @@ startServer(world => {
     // Load UI
     player.ui.load('ui/index.html');
 
-    // Welcome message - game starts when player clicks button or types /restart
+    // Welcome message
     world.chatManager.sendPlayerMessage(player, 'Welcome to McOrder Dash!', '00FF00');
     world.chatManager.sendPlayerMessage(player, 'Click "START GAME" button or type /restart in chat to begin!', '00FF00');
-    world.chatManager.sendPlayerMessage(player, 'Move around to catch falling food items in the correct order!', '00FF00');
+    world.chatManager.sendPlayerMessage(player, 'Explore the world to find food items in the correct order!', '00FF00');
+    world.chatManager.sendPlayerMessage(player, 'Walk close to items to collect them. Complete orders to earn points!', '00FF00');
     
     // Don't start game automatically - wait for button click
     state.isGameOver = true;
@@ -395,15 +404,11 @@ startServer(world => {
     const state = playerGameStates.get(playerId);
     
     if (state) {
-      if (state.itemDropTimer) {
-        clearInterval(state.itemDropTimer);
+      if (state.orderTimer) {
+        clearTimeout(state.orderTimer);
       }
       
-      state.fallingItems.forEach(item => {
-        if (item.isSpawned) {
-          item.despawn();
-        }
-      });
+      clearWorldItems(state);
       
       if (state.managerEntity && state.managerEntity.isSpawned) {
         state.managerEntity.despawn();
@@ -421,20 +426,15 @@ startServer(world => {
     let state = playerGameStates.get(playerId);
     
     if (!state) {
-      // Create state if it doesn't exist
       state = initGameState(player);
       playerGameStates.set(playerId, state);
     }
     
     // Clean up
-    if (state.itemDropTimer) {
-      clearInterval(state.itemDropTimer);
+    if (state.orderTimer) {
+      clearTimeout(state.orderTimer);
     }
-    state.fallingItems.forEach(item => {
-      if (item.isSpawned) {
-        item.despawn();
-      }
-    });
+    clearWorldItems(state);
     
     // Reset state
     state.score = 0;
@@ -442,12 +442,9 @@ startServer(world => {
     state.currentOrder = [];
     state.orderProgress = 0;
     state.orderCount = 0;
-    state.fallSpeed = GAME_CONFIG.FALL_SPEED_INITIAL;
-    state.dropInterval = GAME_CONFIG.DROP_INTERVAL_INITIAL;
     state.isGameOver = false;
-    state.fallingItems = [];
     
-    world.chatManager.sendPlayerMessage(player, 'Game started! Get ready!', '00FF00');
+    world.chatManager.sendPlayerMessage(player, 'Game started! Get ready to explore!', '00FF00');
     setTimeout(() => {
       startNewOrder(world, playerId, state);
     }, 1000);
