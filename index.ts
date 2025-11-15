@@ -438,14 +438,11 @@ startServer(world => {
         // Increased vertical tolerance to 5.0 for easier collection
         if (horizontalDistance < GAME_CONFIG.ITEM_COLLECTION_DISTANCE && verticalDistance < 5.0) {
           // Debug logging
-          console.log(`[COLLECTION] Player near item ${itemCode}: horizontal=${horizontalDistance.toFixed(2)}, vertical=${verticalDistance.toFixed(2)}`);
+          console.log(`[COLLECTION] Collecting item ${itemCode}: horizontal=${horizontalDistance.toFixed(2)}, vertical=${verticalDistance.toFixed(2)}`);
           
           // Reset notification for this item if collected
           state.nearbyItemsNotified.delete(item.id);
           processItemCollection(world, playerId, state, item, itemCode);
-        } else if (horizontalDistance < GAME_CONFIG.ITEM_COLLECTION_DISTANCE + 1.0) {
-          // Debug: log when close but not collecting
-          console.log(`[COLLECTION DEBUG] Close but not collecting ${itemCode}: horizontal=${horizontalDistance.toFixed(2)}, vertical=${verticalDistance.toFixed(2)}, threshold=${GAME_CONFIG.ITEM_COLLECTION_DISTANCE}`);
         }
       });
     });
