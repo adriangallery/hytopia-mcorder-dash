@@ -252,7 +252,14 @@ startServer(world => {
 
   // Process item collection
   function processItemCollection(world: any, playerId: string, state: PlayerGameState, item: Entity, itemCode: string) {
+    // Check if item is still valid and spawned
+    if (!item || !item.isSpawned) {
+      console.log(`[COLLECTION] Item ${itemCode} is no longer valid`);
+      return;
+    }
+    
     if (state.orderProgress === state.currentOrder.length) {
+      console.log(`[COLLECTION] Order already fulfilled`);
       return; // Order already fulfilled
     }
 
@@ -260,6 +267,7 @@ startServer(world => {
 
     if (itemCode === requiredItemCode) {
       // Correct item!
+      console.log(`[COLLECTION] ✅ Correct item collected: ${itemCode}`);
       state.orderProgress++;
       state.score += GAME_CONFIG.SCORE_PER_ITEM;
 
@@ -289,10 +297,15 @@ startServer(world => {
         );
       }
 
-      // Remove item from world
-      if (item.isSpawned) {
-        item.despawn();
+      // Remove item from world IMMEDIATELY - do this first to prevent pushing
+      try {
+        if (item.isSpawned) {
+          item.despawn();
+        }
+      } catch (e) {
+        console.log('Error despawning item:', e);
       }
+      // Remove from state immediately
       state.worldItems = state.worldItems.filter(i => i.id !== item.id);
 
       if (state.orderProgress === state.currentOrder.length) {
