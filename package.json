@@ -14,5 +14,8 @@
   "optionalDependencies": {
     "@hytopia.com/assets": "^0.4.2"
   },
-  "description": ""
+  "description": "A 3D exploration-based order fulfillment game for HYTOPIA platform.",
+  "directories": {
+    "example": "examples"
+  }
 }
