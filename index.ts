@@ -54,7 +54,6 @@ interface PlayerGameState {
   worldItems: Entity[]; // Items placed in the world
   orderTimer?: NodeJS.Timeout;
   managerEntity?: Entity;
-  lastPlayerPos?: { x: number; y: number; z: number }; // Track last position for direction
   player: any;
 }
 
@@ -107,66 +106,11 @@ startServer(world => {
       orderCount: 0,
       isGameOver: false,
       worldItems: [],
-      lastPlayerPos: { x: 0, y: 10, z: 0 },
       player: player,
     };
   }
 
-  // Create manager entity that follows the player
-  function createManagerEntity(world: any, playerId: string, playerPos: { x: number; y: number; z: number }, direction: 'left' | 'right' = 'right'): Entity {
-    const textureUri = direction === 'left' 
-      ? 'mcorder/Manager_L.png' 
-      : 'mcorder/Manager_R.png';
-    
-    // Create a billboard-style entity (thin in Z axis to face camera)
-    const manager = new Entity({
-      name: `manager-${playerId}`,
-      blockTextureUri: textureUri,
-      blockHalfExtents: { x: 0.6, y: 1.2, z: 0.1 }, // Thin in Z to make it billboard-like
-    });
-    
-    // Position manager slightly above and behind player
-    manager.spawn(world, {
-      x: playerPos.x,
-      y: playerPos.y + 0.5,
-      z: playerPos.z,
-    });
-    
-    // Make it fixed so it doesn't fall
-    if (manager.rigidBodyOptions) {
-      manager.rigidBodyOptions.type = 'fixed';
-    }
-    
-    return manager;
-  }
-
-  // Update manager position and direction
-  function updateManagerEntity(world: any, managerEntity: Entity, playerPos: { x: number; y: number; z: number }, lastPlayerPos: { x: number; y: number; z: number }): void {
-    if (!managerEntity.isSpawned) return;
-    
-    // Determine direction based on movement
-    const deltaX = playerPos.x - lastPlayerPos.x;
-    const direction = deltaX < 0 ? 'left' : 'right';
-    
-    // Update position to follow player
-    managerEntity.position = {
-      x: playerPos.x,
-      y: playerPos.y + 0.5,
-      z: playerPos.z,
-    };
-    
-    // Update texture if direction changed
-    const currentTexture = direction === 'left' ? 'mcorder/Manager_L.png' : 'mcorder/Manager_R.png';
-    if (managerEntity.blockTextureUri !== currentTexture) {
-      managerEntity.blockTextureUri = currentTexture;
-      // Need to respawn to update texture
-      const oldPos = managerEntity.position;
-      managerEntity.despawn();
-      managerEntity.spawn(world, oldPos);
-    }
-  }
-
-  // Spawn an item in the world near the player - make it more visible
+  // Spawn an item in the world near the player
   function spawnWorldItem(world: any, itemCode: string, playerId: string, playerPos: { x: number; y: number; z: number }): Entity | null {
     const itemType = GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES];
     if (!itemType) {
@@ -176,18 +120,17 @@ startServer(world => {
 
     const position = getRandomPositionNearPlayer(playerPos);
     
-    // Create entity with block texture - make it larger and more visible
-    // Use billboard-style (thin in Z) so it's more visible from all angles
+    // Create entity with block texture - ensure texture path is correct
     const item = new Entity({
       name: `item-${itemCode}-${Date.now()}-${Math.random()}`,
       blockTextureUri: itemType.textureUri,
-      blockHalfExtents: { x: 0.8, y: 0.8, z: 0.1 }, // Larger X/Y, thin Z for billboard effect
+      blockHalfExtents: { x: 0.5, y: 0.5, z: 0.5 },
     });
 
     // Spawn the entity first
     item.spawn(world, position);
 
-    // Set rigid body to fixed so it doesn't fall
+    // Set rigid body to fixed after spawning
     if (item.rigidBodyOptions) {
       item.rigidBodyOptions.type = 'fixed';
     }
@@ -392,9 +335,10 @@ startServer(world => {
     );
   }
 
-  // Game loop - check for item collection, prevent falling, and update manager
+  // Game loop - check for item collection and prevent falling
   world.on(WorldEvent.TICK, () => {
     playerGameStates.forEach((state, playerId) => {
+      if (state.isGameOver) return;
       if (!state || !state.player) return;
 
       const playerEntities = world.entityManager.getPlayerEntitiesByPlayer(state.player);
@@ -402,16 +346,6 @@ startServer(world => {
 
       const playerEntity = playerEntities[0];
       const playerPos = playerEntity.position;
-
-      // Update manager entity to follow player
-      if (state.managerEntity && state.lastPlayerPos) {
-        updateManagerEntity(world, state.managerEntity, playerPos, state.lastPlayerPos);
-      }
-      
-      // Update last position
-      state.lastPlayerPos = { ...playerPos };
-
-      if (state.isGameOver) return;
 
       // Prevent player from falling - teleport back if too low
       if (playerPos.y < GAME_CONFIG.MIN_SAFE_Y) {
@@ -462,11 +396,7 @@ startServer(world => {
       name: 'Player',
     });
 
-    const spawnPos = { x: 0, y: 10, z: 0 };
-    playerEntity.spawn(world, spawnPos);
-    
-    // Create manager entity that follows the player
-    state.managerEntity = createManagerEntity(world, playerId, spawnPos, 'right');
+    playerEntity.spawn(world, { x: 0, y: 10, z: 0 });
     
     // Verify map loaded - send confirmation message
     world.chatManager.sendPlayerMessage(player, 'Map loaded successfully!', '00FF00');
@@ -496,11 +426,6 @@ startServer(world => {
       }
       
       clearWorldItems(state);
-      
-      // Despawn manager entity
-      if (state.managerEntity && state.managerEntity.isSpawned) {
-        state.managerEntity.despawn();
-      }
     }
     
     playerGameStates.delete(playerId);
