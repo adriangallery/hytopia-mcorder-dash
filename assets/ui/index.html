@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>McOrder Dash - HYTOPIA</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        
+        :root {
+            --lcd-bg: #c8d8ae;
+            --lcd-fg: #1a1a1a;
+            --lcd-accent: #e53e3e;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Press Start 2P', cursive;
+            overflow: hidden;
+        }
+
+        .game-ui {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .info-bar {
+            background-color: var(--lcd-accent);
+            color: #fff;
+            padding: 10px 15px;
+            text-align: center;
+            font-size: 0.5rem;
+            border-bottom: 5px solid var(--lcd-fg);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .info-bar > div {
+            display: flex;
+            gap: 15px;
+        }
+
+        .order-display {
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(200, 216, 174, 0.9);
+            border: 5px solid var(--lcd-fg);
+            border-radius: 10px;
+            padding: 15px 20px;
+            text-align: center;
+            min-width: 300px;
+        }
+
+        .order-display-title {
+            font-size: 0.4rem;
+            margin-bottom: 10px;
+            color: var(--lcd-fg);
+        }
+
+        .order-items {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .order-item-icon {
+            width: 40px;
+            height: 40px;
+            opacity: 0.4;
+            transition: opacity 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .order-item-icon.fulfilled {
+            opacity: 1;
+            filter: drop-shadow(0 0 5px rgba(229, 62, 62, 0.8));
+        }
+
+        .order-item-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        .game-over-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 1rem;
+            z-index: 2000;
+            pointer-events: all;
+        }
+        
+        .game-over-overlay button {
+            pointer-events: all;
+            cursor: pointer;
+        }
+
+        .game-over-overlay.show {
+            display: flex;
+        }
+
+        .game-over-overlay button {
+            margin-top: 20px;
+            padding: 15px 30px;
+            background-color: #f6d10c;
+            color: var(--lcd-fg);
+            border: 4px solid #fff;
+            border-radius: 8px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            box-shadow: 0 4px #ccaf0a;
+            font-family: 'Press Start 2P', cursive;
+            transition: all 0.1s;
+        }
+
+        .game-over-overlay button:active {
+            box-shadow: 0 1px #ccaf0a;
+            transform: translateY(3px);
+        }
+
+        .status-message {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(26, 26, 26, 0.8);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 0.5rem;
+            text-align: center;
+            display: none;
+        }
+
+        .status-message.show {
+            display: block;
+        }
+
+        .mobile-controls {
+            display: none;
+        }
+
+        body.mobile .mobile-controls {
+            display: flex;
+            gap: 14px;
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+        }
+
+        .mobile-button {
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            align-items: center;
+            justify-content: center;
+            display: flex;
+            width: 50px;
+            height: 50px;
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: all;
+        }
+
+        .mobile-button img {
+            width: 22px;
+            height: 22px;
+        }
+
+        .mobile-button.active {
+            transform: scale(0.92);
+            background-color: rgba(0, 0, 0, 0.75);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-ui">
+        <div class="info-bar">
+            <div id="status-message-bar">FULFILL THE ORDERS!</div>
+            <div>
+                SCORE: <span id="score-display">0</span> | LIVES: <span id="lives-display">3</span>
+            </div>
+        </div>
+
+        <div class="order-display">
+            <div class="order-display-title">ORDER UP!</div>
+            <div id="current-order" class="order-items"></div>
+        </div>
+
+        <div id="status-message" class="status-message"></div>
+
+        <div id="game-over-overlay" class="game-over-overlay">
+            <div id="overlay-title">ADRIAN'S MCORDER DASH</div>
+            <div style="font-size: 0.6rem; margin: 20px 0;">Score: <span id="final-score">0</span></div>
+            <button id="overlay-button">START GAME</button>
+        </div>
+    </div>
+
+    <div class="mobile-controls">
+        <a id="mobile-interact-button" class="mobile-button">
+            <img src="{{CDN_ASSETS_URL}}/icons/target.png" />
+        </a>
+        <a id="mobile-jump-button" class="mobile-button">
+            <img src="{{CDN_ASSETS_URL}}/icons/jump.png" />
+        </a>
+    </div>
+
+    <script>
+        // Game state
+        let currentOrder = [];
+        let orderProgress = 0;
+        let score = 0;
+        let lives = 3;
+        let isGameOver = true;
+
+        // Asset paths
+        const ITEM_IMAGES = {
+            'B': '{{CDN_ASSETS_URL}}/blocks/mcorder/Burger.png',
+            'F': '{{CDN_ASSETS_URL}}/blocks/mcorder/Fries.png',
+            'D': '{{CDN_ASSETS_URL}}/blocks/mcorder/Coke.png',
+            'N': '{{CDN_ASSETS_URL}}/blocks/mcorder/Nuggets.png',
+            'I': '{{CDN_ASSETS_URL}}/blocks/mcorder/Ice.png',
+        };
+
+        function updateUI() {
+            // Update score and lives
+            document.getElementById('score-display').textContent = score;
+            document.getElementById('lives-display').textContent = lives;
+
+            // Update order display
+            const orderDisplay = document.getElementById('current-order');
+            orderDisplay.innerHTML = '';
+
+            if (currentOrder.length > 0) {
+                currentOrder.forEach((itemCode, index) => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = `order-item-icon ${index < orderProgress ? 'fulfilled' : ''}`;
+                    
+                    const img = document.createElement('img');
+                    img.src = ITEM_IMAGES[itemCode] || '';
+                    img.alt = itemCode;
+                    
+                    itemDiv.appendChild(img);
+                    orderDisplay.appendChild(itemDiv);
+                });
+            }
+        }
+
+        function showStatusMessage(message, duration = 2000) {
+            const statusEl = document.getElementById('status-message');
+            statusEl.textContent = message;
+            statusEl.classList.add('show');
+            
+            setTimeout(() => {
+                statusEl.classList.remove('show');
+            }, duration);
+        }
+
+        function showGameOver(finalScore) {
+            isGameOver = true;
+            document.getElementById('final-score').textContent = finalScore;
+            document.getElementById('overlay-title').textContent = 'GAME OVER!';
+            document.getElementById('overlay-button').textContent = 'RETRY';
+            document.getElementById('game-over-overlay').classList.add('show');
+        }
+
+        function hideGameOver() {
+            isGameOver = false;
+            document.getElementById('game-over-overlay').classList.remove('show');
+        }
+
+        function restartGame() {
+            console.log('restartGame called');
+            hideGameOver();
+            score = 0;
+            lives = 3;
+            currentOrder = [];
+            orderProgress = 0;
+            updateUI();
+            
+            // Send restart command to server
+            if (typeof hytopia !== 'undefined' && hytopia.sendChatMessage) {
+                hytopia.sendChatMessage('/restart');
+            } else {
+                console.error('hytopia.sendChatMessage not available');
+            }
+        }
+        
+        // Make restartGame available globally
+        window.restartGame = restartGame;
+
+        // Listen for game state updates from server
+        // Note: In a real implementation, you would use HYTOPIA's event system
+        // For now, we'll update based on chat messages or use a polling mechanism
+        
+        // Initialize UI
+        updateUI();
+        document.getElementById('game-over-overlay').classList.add('show');
+        
+        // Setup button click handler
+        const overlayButton = document.getElementById('overlay-button');
+        if (overlayButton) {
+            overlayButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                restartGame();
+            });
+        }
+
+        // Mobile controls
+        const mobileInteractButton = document.getElementById('mobile-interact-button');
+        if (mobileInteractButton) {
+            mobileInteractButton.addEventListener('touchstart', e => {
+                e.preventDefault();
+                mobileInteractButton.classList.add('active');
+                if (typeof hytopia !== 'undefined') {
+                    hytopia.pressInput('ml', true);
+                }
+            });
+
+            mobileInteractButton.addEventListener('touchend', e => {
+                e.preventDefault();
+                mobileInteractButton.classList.remove('active');
+                if (typeof hytopia !== 'undefined') {
+                    hytopia.pressInput('ml', false);
+                }
+            });
+        }
+
+        const mobileJumpButton = document.getElementById('mobile-jump-button');
+        if (mobileJumpButton) {
+            mobileJumpButton.addEventListener('touchstart', e => {
+                e.preventDefault();
+                mobileJumpButton.classList.add('active');
+                if (typeof hytopia !== 'undefined') {
+                    hytopia.pressInput(' ', true);
+                }
+            });
+
+            mobileJumpButton.addEventListener('touchend', e => {
+                e.preventDefault();
+                mobileJumpButton.classList.remove('active');
+                if (typeof hytopia !== 'undefined') {
+                    hytopia.pressInput(' ', false);
+                }
+            });
+        }
+
+        // Simulate game updates (in real implementation, this would come from server events)
+        // This is a placeholder - you would need to implement proper event communication
+        setInterval(() => {
+            // This would be replaced with actual server communication
+            // For now, the UI will be updated via chat messages parsed by the server
+        }, 100);
+    </script>
+</body>
+</html>
