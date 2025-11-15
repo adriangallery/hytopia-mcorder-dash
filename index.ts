@@ -28,11 +28,12 @@ const GAME_CONFIG = {
   MIN_SAFE_Y: -5, // Minimum Y position before teleporting player back
   SAFE_SPAWN_Y: 10, // Safe Y position to teleport player to
   ITEM_TYPES: {
-    'B': { blockId: 17, name: 'Burger', textureUri: 'blocks/mcorder/Burger.png' },
-    'F': { blockId: 18, name: 'Fries', textureUri: 'blocks/mcorder/Fries.png' },
-    'N': { blockId: 19, name: 'Nuggets', textureUri: 'blocks/mcorder/Nuggets.png' },
-    'D': { blockId: 20, name: 'Drink', textureUri: 'blocks/mcorder/Coke.png' },
-    'I': { blockId: 21, name: 'Icecream', textureUri: 'blocks/mcorder/Ice.png' },
+    // Using standard HYTOPIA blocks for testing - these are guaranteed to be visible
+    'B': { blockId: 4, name: 'Burger', textureUri: 'blocks/coal-ore.png' }, // Coal ore (black/dark)
+    'F': { blockId: 3, name: 'Fries', textureUri: 'blocks/bricks.png' }, // Bricks (red/orange)
+    'N': { blockId: 15, name: 'Nuggets', textureUri: 'blocks/stone.png' }, // Stone (gray)
+    'D': { blockId: 12, name: 'Drink', textureUri: 'blocks/sand.png' }, // Sand (yellow/beige)
+    'I': { blockId: 10, name: 'Icecream', textureUri: 'blocks/oak-leaves.png' }, // Oak leaves (green)
   },
   ORDERS: [
     ['B', 'F'], // Tutorial Order
@@ -110,7 +111,7 @@ startServer(world => {
     };
   }
 
-  // Spawn an item in the world near the player
+  // Spawn an item in the world near the player using standard HYTOPIA blocks
   function spawnWorldItem(world: any, itemCode: string, playerId: string, playerPos: { x: number; y: number; z: number }): Entity | null {
     const itemType = GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES];
     if (!itemType) {
@@ -120,22 +121,23 @@ startServer(world => {
 
     const position = getRandomPositionNearPlayer(playerPos);
     
-    // Create entity with block texture - ensure texture path is correct
+    // Create entity using standard HYTOPIA block texture - these are guaranteed to work
+    // Make it larger and more visible for testing
     const item = new Entity({
       name: `item-${itemCode}-${Date.now()}-${Math.random()}`,
       blockTextureUri: itemType.textureUri,
-      blockHalfExtents: { x: 0.5, y: 0.5, z: 0.5 },
+      blockHalfExtents: { x: 0.6, y: 0.6, z: 0.6 }, // Larger size for better visibility
     });
 
-    // Spawn the entity first
+    // Spawn the entity
     item.spawn(world, position);
 
-    // Set rigid body to fixed after spawning
+    // Set rigid body to fixed so it doesn't fall
     if (item.rigidBodyOptions) {
       item.rigidBodyOptions.type = 'fixed';
     }
 
-    console.log(`Spawned item ${itemCode} at position:`, position, 'with texture:', itemType.textureUri);
+    console.log(`Spawned item ${itemCode} (${itemType.name}) at position:`, position, 'using block:', itemType.textureUri);
     return item;
   }
 
