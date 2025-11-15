@@ -18,19 +18,15 @@ import worldMap from './assets/map.json';
 
 // Game Configuration
 const GAME_CONFIG = {
-  WORLD_BOUNDS: {
-    minX: -20,
-    maxX: 20,
-    minZ: -20,
-    maxZ: 20,
-    groundY: 2,
-  },
-  ITEM_SPAWN_HEIGHT: 3, // Height above ground for items
+  SPAWN_RADIUS: 12, // Radius around player to spawn items (controlled testing area)
+  ITEM_SPAWN_HEIGHT: 2.5, // Height above ground for items
   ITEM_COLLECTION_DISTANCE: 2.5, // Distance to collect item
   ITEMS_PER_ORDER: 5, // Number of items to spawn for each order
   SCORE_PER_ITEM: 10,
   SCORE_PER_ORDER: 100,
   TIME_LIMIT_PER_ORDER: 60000, // 60 seconds per order
+  MIN_SAFE_Y: -5, // Minimum Y position before teleporting player back
+  SAFE_SPAWN_Y: 10, // Safe Y position to teleport player to
   ITEM_TYPES: {
     'B': { blockId: 17, name: 'Burger', textureUri: 'blocks/mcorder/Burger.png' },
     'F': { blockId: 18, name: 'Fries', textureUri: 'blocks/mcorder/Fries.png' },
@@ -63,13 +59,15 @@ interface PlayerGameState {
 
 const playerGameStates = new Map<string, PlayerGameState>();
 
-// Generate random position within world bounds
-function getRandomPosition(): { x: number; y: number; z: number } {
-  const x = GAME_CONFIG.WORLD_BOUNDS.minX + 
-    Math.random() * (GAME_CONFIG.WORLD_BOUNDS.maxX - GAME_CONFIG.WORLD_BOUNDS.minX);
-  const z = GAME_CONFIG.WORLD_BOUNDS.minZ + 
-    Math.random() * (GAME_CONFIG.WORLD_BOUNDS.maxZ - GAME_CONFIG.WORLD_BOUNDS.minZ);
-  const y = GAME_CONFIG.WORLD_BOUNDS.groundY + GAME_CONFIG.ITEM_SPAWN_HEIGHT;
+// Generate random position near player (controlled testing area)
+function getRandomPositionNearPlayer(playerPos: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
+  // Generate position within radius around player
+  const angle = Math.random() * Math.PI * 2;
+  const distance = 3 + Math.random() * (GAME_CONFIG.SPAWN_RADIUS - 3); // Min 3 blocks away, max SPAWN_RADIUS
+  
+  const x = playerPos.x + Math.cos(angle) * distance;
+  const z = playerPos.z + Math.sin(angle) * distance;
+  const y = playerPos.y + GAME_CONFIG.ITEM_SPAWN_HEIGHT;
   
   return { x, y, z };
 }
@@ -120,12 +118,12 @@ startServer(world => {
     return manager;
   }
 
-  // Spawn an item in the world at a random position
-  function spawnWorldItem(world: any, itemCode: string, playerId: string): Entity | null {
+  // Spawn an item in the world near the player
+  function spawnWorldItem(world: any, itemCode: string, playerId: string, playerPos: { x: number; y: number; z: number }): Entity | null {
     const itemType = GAME_CONFIG.ITEM_TYPES[itemCode as keyof typeof GAME_CONFIG.ITEM_TYPES];
     if (!itemType) return null;
 
-    const position = getRandomPosition();
+    const position = getRandomPositionNearPlayer(playerPos);
     
     const item = new Entity({
       name: `item-${itemCode}-${Date.now()}-${Math.random()}`,
@@ -164,6 +162,12 @@ startServer(world => {
       clearTimeout(state.orderTimer);
     }
 
+    // Get player position for spawning items nearby
+    const playerEntities = world.entityManager.getPlayerEntitiesByPlayer(state.player);
+    if (playerEntities.length === 0) return;
+    const playerEntity = playerEntities[0];
+    const playerPos = playerEntity.position;
+
     // Select order
     if (state.orderCount === 1) {
       state.currentOrder = GAME_CONFIG.ORDERS[0];
@@ -174,7 +178,7 @@ startServer(world => {
 
     state.orderProgress = 0;
 
-    // Spawn items in the world
+    // Spawn items in the world near player
     // Spawn all items needed for the order, plus some extra random ones
     const itemsToSpawn: string[] = [];
     
@@ -197,9 +201,9 @@ startServer(world => {
       [itemsToSpawn[i], itemsToSpawn[j]] = [itemsToSpawn[j], itemsToSpawn[i]];
     }
 
-    // Spawn all items
+    // Spawn all items near player
     itemsToSpawn.forEach(itemCode => {
-      const item = spawnWorldItem(world, itemCode, playerId);
+      const item = spawnWorldItem(world, itemCode, playerId, playerPos);
       if (item) {
         state.worldItems.push(item);
       }
@@ -331,7 +335,7 @@ startServer(world => {
     );
   }
 
-  // Game loop - check for item collection
+  // Game loop - check for item collection and prevent falling
   world.on(WorldEvent.TICK, () => {
     playerGameStates.forEach((state, playerId) => {
       if (state.isGameOver) return;
@@ -342,6 +346,20 @@ startServer(world => {
 
       const playerEntity = playerEntities[0];
       const playerPos = playerEntity.position;
+
+      // Prevent player from falling - teleport back if too low
+      if (playerPos.y < GAME_CONFIG.MIN_SAFE_Y) {
+        playerEntity.position = {
+          x: playerPos.x,
+          y: GAME_CONFIG.SAFE_SPAWN_Y,
+          z: playerPos.z,
+        };
+        world.chatManager.sendPlayerMessage(
+          state.player,
+          'Teleported back to safe area!',
+          'FFFF00'
+        );
+      }
 
       // Check distance to each item
       state.worldItems.forEach(item => {
@@ -391,8 +409,9 @@ startServer(world => {
     // Welcome message
     world.chatManager.sendPlayerMessage(player, 'Welcome to McOrder Dash!', '00FF00');
     world.chatManager.sendPlayerMessage(player, 'Click "START GAME" button or type /restart in chat to begin!', '00FF00');
-    world.chatManager.sendPlayerMessage(player, 'Explore the world to find food items in the correct order!', '00FF00');
+    world.chatManager.sendPlayerMessage(player, 'Items will spawn near you in a controlled testing area!', '00FF00');
     world.chatManager.sendPlayerMessage(player, 'Walk close to items to collect them. Complete orders to earn points!', '00FF00');
+    world.chatManager.sendPlayerMessage(player, 'You cannot fall - you will be teleported back if you go too low!', '00FF00');
     
     // Don't start game automatically - wait for button click
     state.isGameOver = true;
